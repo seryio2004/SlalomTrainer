@@ -1,0 +1,9 @@
+{
+  "name": "TeiTraining",
+  "short_name": "TeiTraining",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f5",
+  "theme_color": "#135c5e",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: tei
+      POSTGRES_USER: tei
+      POSTGRES_PASSWORD: tei
+    ports:
+      - "5432:5432"
+    volumes:
+      - tei_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tei -d tei"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  tei_db:
