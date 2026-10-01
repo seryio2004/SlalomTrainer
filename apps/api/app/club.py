@@ -11,6 +11,7 @@ from .deps import ActorDep, Db, athlete_for_member, coach_can_see, membership, r
 from .models import Athlete, Club, CoachAthleteGrant, CoachGroupGrant, Membership, TrainingGroup, TrainingGroupMembership, User
 from .schemas import GrantIn, GroupAthleteIn, GroupCoachIn, GroupIn, MemberIn
 from .security import hash_password
+from .audit import record
 
 router = APIRouter()
 
@@ -27,7 +28,7 @@ def create_member(club_id: str, data: MemberIn, actor: ActorDep, db: Db, x_csrf_
     require_csrf(actor, x_csrf_token)
     membership(db, actor, club_id, "club_admin")
     if os.environ.get("APP_ENV") != "development":
-        raise HTTPException(501, "El alta segura por invitación está pendiente")
+        raise HTTPException(501, "Usa la invitación segura para dar acceso al club")
     if not data.roles or db.scalar(select(User.id).where(User.email == str(data.email).lower().strip())):
         raise HTTPException(409, "Email existente o roles vacíos")
     user = User(email=str(data.email).lower().strip(), name=data.name.strip(), password_hash=hash_password(data.password))
@@ -42,6 +43,8 @@ def create_member(club_id: str, data: MemberIn, actor: ActorDep, db: Db, x_csrf_
         db.add(athlete)
         db.flush()
     result = {"id": member.id, "user_id": user.id, "athlete_id": athlete.id if athlete else None}
+    db.flush()
+    record(db, actor, club_id, "member.created", member.id)
     db.commit()
     return result
 
@@ -70,6 +73,8 @@ def grant(club_id: str, data: GrantIn, actor: ActorDep, db: Db, x_csrf_token: An
         return {"id": existing.id}
     row = CoachAthleteGrant(club_id=club_id, coach_membership_id=coach.id, athlete_id=athlete.id)
     db.add(row)
+    db.flush()
+    record(db, actor, club_id, "coach.direct_access_granted", row.id)
     db.commit()
     return {"id": row.id}
 
@@ -90,7 +95,7 @@ def groups(club_id: str, actor: ActorDep, db: Db) -> list[dict]:
             TrainingGroupMembership.club_id == club_id,
             TrainingGroupMembership.group_id == row.id,
             TrainingGroupMembership.joined_on <= today,
-            (TrainingGroupMembership.left_on.is_(None) | (TrainingGroupMembership.left_on >= today)),
+            (TrainingGroupMembership.left_on.is_(None) | (TrainingGroupMembership.left_on > today)),
         )).all()
         result.append({"id": row.id, "name": row.name, "description": row.description, "athlete_ids": athlete_ids})
     return result
@@ -107,6 +112,8 @@ def create_group(club_id: str, data: GroupIn, actor: ActorDep, db: Db, x_csrf_to
         raise HTTPException(409, "Ya existe el grupo")
     row = TrainingGroup(club_id=club_id, name=name, description=data.description)
     db.add(row)
+    db.flush()
+    record(db, actor, club_id, "group.created", row.id)
     db.commit()
     return {"id": row.id, "name": row.name}
 
@@ -119,12 +126,14 @@ def add_group_athlete(club_id: str, group_id: str, data: GroupAthleteIn, actor: 
     athlete = db.scalar(select(Athlete).where(Athlete.club_id == club_id, Athlete.id == data.athlete_id))
     if not group or not athlete or not db.get(Membership, athlete.membership_id).active:
         raise HTTPException(404, "Grupo o deportista no encontrado")
-    existing = db.scalar(select(TrainingGroupMembership).where(TrainingGroupMembership.club_id == club_id, TrainingGroupMembership.group_id == group_id, TrainingGroupMembership.athlete_id == athlete.id))
+    existing = db.scalar(select(TrainingGroupMembership).where(TrainingGroupMembership.club_id == club_id, TrainingGroupMembership.group_id == group_id, TrainingGroupMembership.athlete_id == athlete.id, TrainingGroupMembership.left_on.is_(None)))
     if existing:
         return {"id": existing.id}
     today = datetime.now(ZoneInfo(db.get(Club, club_id).timezone)).date()
     row = TrainingGroupMembership(club_id=club_id, group_id=group_id, athlete_id=athlete.id, joined_on=today)
     db.add(row)
+    db.flush()
+    record(db, actor, club_id, "group.athlete_added", row.id)
     db.commit()
     return {"id": row.id}
 
@@ -142,5 +151,7 @@ def add_group_coach(club_id: str, group_id: str, data: GroupCoachIn, actor: Acto
         return {"id": existing.id}
     row = CoachGroupGrant(club_id=club_id, group_id=group_id, coach_membership_id=coach.id)
     db.add(row)
+    db.flush()
+    record(db, actor, club_id, "group.coach_granted", row.id)
     db.commit()
     return {"id": row.id}

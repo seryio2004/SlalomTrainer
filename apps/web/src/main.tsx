@@ -9,3 +9,7 @@ if (!root) {
 }
 
 createRoot(root).render(<App />)
+
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  void navigator.serviceWorker.register('/sw.js').catch(() => {})
+}

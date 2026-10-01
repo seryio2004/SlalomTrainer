@@ -51,10 +51,10 @@ def test_training_flow_and_isolation(monkeypatch):
         assert clients['other'].get(base + '/assignments').status_code == 403
         assert clients['athlete'].get('/api/v1/clubs/' + other_id + '/assignments').status_code == 403
         url = base + '/assignments/' + own[0]['id'] + '/report'
-        assert clients['coach'].post(url, json={'status': 'completed'}, headers=headers['coach']).status_code == 403
-        assert clients['athlete'].post(url, json={'status': 'completed'}).status_code == 403
-        payload = {'status': 'completed', 'actual_minutes': 45, 'rpe': 7, 'feeling': 3, 'sensations': 'Cómodo', 'work_done': 'Técnica de puertas', 'best': 'La entrada', 'worst': 'La salida'}
-        assert clients['athlete'].post(url, json={'status': 'completed', 'actual_minutes': 45, 'rpe': 7}, headers=headers['athlete']).status_code == 422
+        assert clients['coach'].post(url, json={'version': 1, 'status': 'completed'}, headers=headers['coach']).status_code == 403
+        assert clients['athlete'].post(url, json={'version': 1, 'status': 'completed'}).status_code == 403
+        payload = {'version': own[0]['version'], 'actual_date': datetime.now(timezone.utc).date().isoformat(), 'status': 'completed', 'actual_minutes': 45, 'rpe': 7, 'feeling': 3, 'sensations': 'Cómodo', 'work_done': 'Técnica de puertas', 'best': 'La entrada', 'worst': 'La salida'}
+        assert clients['athlete'].post(url, json={'version': 1, 'status': 'completed', 'actual_minutes': 45, 'rpe': 7}, headers=headers['athlete']).status_code == 422
         saved = clients['athlete'].post(url, json=payload, headers=headers['athlete'])
         assert saved.status_code == 200, saved.text
         assert saved.json()['load'] == 315
@@ -103,7 +103,7 @@ def test_training_flow_and_isolation(monkeypatch):
         later_created = clients['coach'].post(base + '/sessions', json=later, headers=headers['coach'])
         assert later_created.status_code == 201
         second_assignment = next(item for item in clients['athlete'].get(base + '/assignments').json() if item['title'] == 'Movilidad')
-        second_report = clients['athlete'].post(base + '/assignments/' + second_assignment['id'] + '/report', json={'status': 'partial', 'actual_minutes': 20}, headers=headers['athlete'])
+        second_report = clients['athlete'].post(base + '/assignments/' + second_assignment['id'] + '/report', json={'version': 1, 'status': 'partial', 'actual_minutes': 20}, headers=headers['athlete'])
         assert second_report.status_code == 200 and second_report.json()['load'] is None
         second_summary = clients['coach'].get(base + '/sessions/' + later_created.json()['id'] + '/summary').json()
         assert second_summary['load_coverage'] == 0

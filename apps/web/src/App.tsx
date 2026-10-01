@@ -1,5 +1,11 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { AccountAccess } from './components/AccountAccess'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { api } from './api'
+import { Icon } from './components/Icon'
+import { WorkoutSession } from './components/WorkoutSession'
+import { PlanningPage } from './components/PlanningPage'
+import { RecoveryPage } from './components/RecoveryPage'
+import { ClubManagement } from './components/ClubManagement'
 import { AdminPage } from './components/AdminPage'
 import { AthleteView } from './components/AthleteView'
 import { CoachCalendarPage, OrganizePage, TeamPage } from './components/CoachPages'
@@ -27,6 +33,12 @@ function initialPage(me: Me): Page {
 
 function pageTitle(page: Page, name: string): string {
   switch (page) {
+    case 'planning':
+      return 'Planificación'
+    case 'perform':
+      return 'Realizar entreno'
+    case 'recovery':
+      return 'Mi recuperación'
     case 'calendar':
       return 'Planifica la semana'
     case 'organize':
@@ -36,7 +48,7 @@ function pageTitle(page: Page, name: string): string {
     case 'admin':
       return 'Administración'
     case 'athlete':
-      return `Hola, ${name}`
+      return `Entrenamiento de ${name}`
   }
 }
 
@@ -48,27 +60,36 @@ function LoginPage({
   error: string
 }) {
   return (
-    <main className="login">
-      <p className="eyebrow">TeiTraining</p>
-      <h1>Tu entrenamiento, en un solo lugar.</h1>
-      <p>Planificación y seguimiento para piragüismo slalom.</p>
-      <form onSubmit={login}>
-        <label>
-          Email
-          <input name="email" type="email" autoComplete="username" required />
-        </label>
-        <label>
-          Contraseña
-          <input
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-          />
-        </label>
-        <button>Entrar</button>
-      </form>
-      {error && <p role="alert" className="error">{error}</p>}
+    <main className="login-layout">
+      <div className="login-story">
+        <div className="brand"><span>T</span><strong>TeiTraining</strong></div>
+        <div className="login-statement">
+          <p className="eyebrow">Piragüismo slalom</p>
+          <h1>Cada sesión<br />cuenta.</h1>
+          <p>Tu planificación, tus sensaciones y tu evolución. Todo lo que necesitas para seguir entrenando.</p>
+        </div>
+        <p className="login-caption">En el agua. Fuera del agua.</p>
+      </div>
+      <div className="login-form-area">
+        <div className="login">
+          <p className="eyebrow">Tu espacio de entrenamiento</p>
+          <h2>Inicia sesión</h2>
+          <p>Accede con la cuenta de tu club.</p>
+          <AccountAccess />
+          <form onSubmit={login}>
+            <label>
+              Correo electrónico
+              <input name="email" type="email" autoComplete="username" required />
+            </label>
+            <label>
+              Contraseña
+              <input name="password" type="password" autoComplete="current-password" required />
+            </label>
+            <button>Entrar a TeiTraining</button>
+          </form>
+          {error && <p role="alert" className="error">{error}</p>}
+        </div>
+      </div>
     </main>
   )
 }
@@ -83,7 +104,10 @@ type SidebarProps = {
   athletes: Athlete[]
   setPage: (page: Page) => void
   openOwnDashboard: () => Promise<void>
+  openWorkout: () => void
   logout: () => Promise<void>
+  mobile?: boolean
+  close?: () => void
 }
 
 function Sidebar({
@@ -96,77 +120,146 @@ function Sidebar({
   athletes,
   setPage,
   openOwnDashboard,
+  openWorkout,
   logout,
+  mobile = false,
+  close,
 }: SidebarProps) {
   const selectedName = athletes.find(person => person.id === selectedAthlete)?.name
 
+  function navigate(target: Page) {
+    setPage(target)
+    close?.()
+  }
+
+  function openDashboard() {
+    close?.()
+    void openOwnDashboard()
+  }
+
+  function signOut() {
+    close?.()
+    void logout()
+  }
+
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${mobile ? 'mobile-sidebar' : 'desktop-sidebar'}`}>
       <div className="brand">
         <span>T</span>
         <div>
           <strong>TeiTraining</strong>
           <small>Piragüismo slalom</small>
         </div>
+        {mobile && (
+          <button type="button" className="mobile-menu-close" onClick={close}>
+            Cerrar
+          </button>
+        )}
       </div>
-      <nav>
-        <p>MENÚ</p>
+      <nav aria-label="Navegación principal">
+        <p>{coach ? 'ENTRENADOR' : athlete ? 'DEPORTISTA' : 'CLUB'}</p>
         {coach && (
           <>
             <button
               className={page === 'calendar' ? 'active' : ''}
-              onClick={() => setPage('calendar')}
+              aria-current={page === 'calendar' ? 'page' : undefined}
+              onClick={() => navigate('calendar')}
             >
-              Calendario
+              <Icon name="calendar" />
+              <span>Calendario</span>
             </button>
             <button
               className={page === 'organize' ? 'active' : ''}
-              onClick={() => setPage('organize')}
+              aria-current={page === 'organize' ? 'page' : undefined}
+              onClick={() => navigate('organize')}
             >
-              Organizar entreno
+              <Icon name="training" />
+              <span>Organizar entreno</span>
             </button>
             <button
               className={page === 'team' ? 'active' : ''}
-              onClick={() => setPage('team')}
+              aria-current={page === 'team' ? 'page' : undefined}
+              onClick={() => navigate('team')}
             >
-              Deportistas y grupos
+              <Icon name="team" />
+              <span>Deportistas y grupos</span>
             </button>
           </>
+        )}
+        {(coach || admin) && (
+          <button
+            className={page === 'planning' ? 'active' : ''}
+              aria-current={page === 'planning' ? 'page' : undefined}
+            onClick={() => navigate('planning')}
+          >
+            <Icon name="plan" />
+            <span>Planes y temporadas</span>
+          </button>
+        )}
+        {athlete && (
+          <button
+            className={page === 'perform' ? 'active' : ''}
+            aria-current={page === 'perform' ? 'page' : undefined}
+            onClick={() => { openWorkout(); close?.() }}
+          >
+            <Icon name="training" />
+            <span>Realizar entreno</span>
+          </button>
+        )}
+        {athlete && (
+          <button
+            className={page === 'recovery' ? 'active' : ''}
+              aria-current={page === 'recovery' ? 'page' : undefined}
+            onClick={() => navigate('recovery')}
+          >
+            <Icon name="recovery" />
+            <span>Recuperación</span>
+          </button>
         )}
         {athlete && (
           <button
             className={page === 'athlete' && !selectedAthlete ? 'active' : ''}
-            onClick={openOwnDashboard}
+            aria-current={page === 'athlete' && !selectedAthlete ? 'page' : undefined}
+            onClick={openDashboard}
           >
-            Mi entrenamiento
+            <Icon name="training" />
+            <span>Mi entrenamiento</span>
           </button>
         )}
         {coach && selectedAthlete && (
           <button
             className={page === 'athlete' ? 'active' : ''}
-            onClick={() => setPage('athlete')}
+            aria-current={page === 'athlete' ? 'page' : undefined}
+            onClick={() => navigate('athlete')}
           >
-            Vista de {selectedName}
+            <Icon name="training" />
+            <span>Vista de {selectedName}</span>
           </button>
         )}
         {admin && (
           <button
             className={page === 'admin' ? 'active' : ''}
-            onClick={() => setPage('admin')}
+              aria-current={page === 'admin' ? 'page' : undefined}
+            onClick={() => navigate('admin')}
           >
-            Administración
+            <Icon name="settings" />
+            <span>Administración</span>
           </button>
         )}
       </nav>
       <div className="side-foot">
-        <span>{name}</span>
-        <button onClick={logout}>Cerrar sesión</button>
+        <div className="profile-summary">
+          <span className="profile-avatar">{name.slice(0, 1).toUpperCase()}</span>
+          <div><strong>{name}</strong><small>{coach ? 'Entrenador' : athlete ? 'Deportista' : 'Administración'}</small></div>
+        </div>
+        <button onClick={signOut}><Icon name="logout" />Cerrar sesión</button>
       </div>
     </aside>
   )
 }
 
 export function App() {
+  const mobileMenu = useRef<HTMLDialogElement>(null)
   const [me, setMe] = useState<Me | null>(null)
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState('')
@@ -180,12 +273,23 @@ export function App() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null)
   const [summary, setSummary] = useState<Summary | null>(null)
   const [selectedAthlete, setSelectedAthlete] = useState('')
+  const [selectedPlanDay, setSelectedPlanDay] = useState('')
+  const [selectedWorkoutId, setSelectedWorkoutId] = useState('')
 
   const club = me?.memberships[0]
   const base = club ? `/clubs/${club.club_id}` : ''
   const coach = !!club?.roles.includes('coach')
   const admin = !!club?.roles.includes('club_admin')
   const athlete = !!club?.roles.includes('athlete')
+
+  useEffect(() => {
+    const viewport = window.matchMedia('(max-width: 900px)')
+    const closeOnDesktop = () => {
+      if (!viewport.matches && mobileMenu.current?.open) mobileMenu.current.close()
+    }
+    viewport.addEventListener('change', closeOnDesktop)
+    return () => viewport.removeEventListener('change', closeOnDesktop)
+  }, [])
 
   async function refresh(current: Me, athleteId = selectedAthlete) {
     const member = current.memberships[0]
@@ -199,6 +303,10 @@ export function App() {
     let dashboardRequest: Promise<Dashboard | null> = Promise.resolve(null)
     if (canCoach && athleteId) {
       dashboardRequest = api<Dashboard>(`${root}/athletes/${athleteId}/dashboard`)
+        .catch(() => {
+          setSelectedAthlete('')
+          return null
+        })
     } else if (canAthlete) {
       dashboardRequest = api<Dashboard>(`${root}/dashboard/athlete`)
     }
@@ -271,6 +379,7 @@ export function App() {
         setMe(null)
         setDashboard(null)
         setSelectedAthlete('')
+        setSelectedWorkoutId('')
       }, false)
     } catch {
       // run already shows the error in the interface.
@@ -284,6 +393,21 @@ export function App() {
       setDashboard(await api<Dashboard>(`${base}/dashboard/athlete`))
     } catch {
       setError('No se pudo cargar la vista')
+    }
+  }
+
+  async function openWorkout(id = '') {
+    const showingAnotherAthlete = !!selectedAthlete
+    setSelectedAthlete('')
+    setSelectedWorkoutId(id)
+    setPage('perform')
+    if (showingAnotherAthlete) {
+      setDashboard(null)
+      try {
+        setDashboard(await api<Dashboard>(`${base}/dashboard/athlete`))
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'No se pudo cargar tu entrenamiento')
+      }
     }
   }
 
@@ -309,13 +433,36 @@ export function App() {
     })
   }
 
-  async function report(id: string, body: object) {
+  async function editSession(id: string, body: object) {
     await run(async () => {
-      await api(`${base}/assignments/${id}/report`, {
-        method: 'POST',
+      await api(`${base}/sessions/${id}`, {
+        method: 'PATCH',
         body: JSON.stringify(body),
       })
-      setMessage('Entreno y feedback guardados')
+      setSummary(null)
+      setMessage('Entreno actualizado')
+    })
+  }
+
+  async function cancelSession(id: string, version: number) {
+    await run(async () => {
+      await api(`${base}/sessions/${id}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ version }),
+      })
+      setSummary(null)
+      setMessage('Entreno cancelado')
+    })
+  }
+
+  async function report(id: string, body: object) {
+    await run(async () => {
+      const { operation, ...data } = body as { operation?: string }
+      await api(`${base}/assignments/${id}/${operation === 'draft' ? 'draft' : 'report'}`, {
+        method: operation === 'draft' ? 'PUT' : operation === 'correct' ? 'PATCH' : 'POST',
+        body: JSON.stringify(data),
+      })
+      setMessage(operation === 'draft' ? 'Borrador guardado' : 'Entreno y feedback guardados')
     })
   }
 
@@ -329,16 +476,15 @@ export function App() {
 
   async function createMember(form: FormData) {
     await run(async () => {
-      await api(`${base}/members`, {
+      await api(`${base}/invitations`, {
         method: 'POST',
         body: JSON.stringify({
           email: form.get('email'),
           name: form.get('name'),
-          password: form.get('password'),
           roles: [form.get('role')],
         }),
       })
-      setMessage('Cuenta creada')
+      setMessage('Invitación en cola de correo')
     })
   }
 
@@ -356,7 +502,7 @@ export function App() {
   }
 
   if (busy) {
-    return <main className="login"><p>Cargando…</p></main>
+    return <main className="app-loading"><p role="status">Cargando tu espacio de entrenamiento…</p></main>
   }
   if (!me) {
     return <LoginPage login={login} error={error} />
@@ -372,6 +518,7 @@ export function App() {
 
   return (
     <div className="shell">
+      <a className="skip-link" href="#main-content">Ir al contenido</a>
       <Sidebar
         name={me.name}
         page={page}
@@ -382,18 +529,64 @@ export function App() {
         athletes={athletes}
         setPage={setPage}
         openOwnDashboard={openOwnDashboard}
+        openWorkout={openWorkout}
         logout={logout}
       />
-      <main className="content">
-        <header>
+      <div className="mobile-topbar">
+        <div className="brand">
+          <span>T</span>
+          <div>
+            <strong>TeiTraining</strong>
+            <small>Piragüismo slalom</small>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="mobile-menu-trigger"
+          aria-haspopup="dialog"
+          aria-controls="mobile-navigation"
+          onClick={() => mobileMenu.current?.showModal()}
+        >
+          Menú
+        </button>
+      </div>
+      <dialog
+        id="mobile-navigation"
+        ref={mobileMenu}
+        className="mobile-menu-dialog"
+        aria-label="Menú de navegación"
+        onClick={event => {
+          if (event.target === event.currentTarget) event.currentTarget.close()
+        }}
+      >
+        <Sidebar
+          mobile
+          close={() => mobileMenu.current?.close()}
+          name={me.name}
+          page={page}
+          coach={coach}
+          athlete={athlete}
+          admin={admin}
+          selectedAthlete={selectedAthlete}
+          athletes={athletes}
+          setPage={setPage}
+          openOwnDashboard={openOwnDashboard}
+          openWorkout={openWorkout}
+          logout={logout}
+        />
+      </dialog>
+      <main className="content" id="main-content">
+        <header className="page-header">
           <div>
             <p className="eyebrow">
-              {page === 'athlete' ? 'Espacio deportista' : 'Espacio entrenador'}
+              {page === 'athlete' || page === 'recovery' || page === 'perform' ? 'Espacio deportista' : 'Gestión del club'}
             </p>
             <h1>{pageTitle(page, dashboard?.name ?? me.name)}</h1>
           </div>
           <div className="account-actions">
-            <span className="user-pill">{me.name}</span>
+            <time className="header-date" dateTime={new Date().toISOString().slice(0, 10)}>
+              {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </time>
             <button type="button" className="switch-account" onClick={logout}>
               Cambiar cuenta
             </button>
@@ -407,19 +600,56 @@ export function App() {
           <CoachCalendarPage
             sessions={sessions}
             summary={summary}
-            create={() => setPage('organize')}
+            create={() => {
+              setSelectedPlanDay('')
+              setPage('organize')
+            }}
             loadSummary={loadSummary}
+            editSession={editSession}
+            cancelSession={cancelSession}
           />
         )}
         {page === 'organize' && coach && (
           <OrganizePage
+            key={selectedPlanDay}
+            base={base}
+            initialDay={selectedPlanDay}
             athletes={athletes}
             groups={groups}
             publish={publishSession}
           />
         )}
+        {page === 'planning' && (coach || admin) && (
+          <PlanningPage
+            base={base}
+            admin={admin}
+            coach={coach}
+            sessions={sessions}
+            organize={dayId => {
+              setSelectedPlanDay(dayId)
+              setPage('organize')
+            }}
+          />
+        )}
+        {page === 'recovery' && athlete && <RecoveryPage base={base} />}
+        {page === 'perform' && athlete && !dashboard && (
+          <section>Cargando tus entrenamientos…</section>
+        )}
+        {page === 'perform' && athlete && dashboard && (
+          <WorkoutSession
+            assignments={dashboard.assignments}
+            selectedId={selectedWorkoutId}
+            onSelect={setSelectedWorkoutId}
+            onReport={async (id, body) => {
+              await report(id, body)
+              setPage('athlete')
+              setSelectedWorkoutId('')
+            }}
+          />
+        )}
         {page === 'team' && coach && (
           <TeamPage
+            base={base}
             athletes={athletes}
             groups={groups}
             openAthlete={openAthlete}
@@ -431,18 +661,33 @@ export function App() {
               key={dashboard.athlete_id}
               dashboard={dashboard}
               editable={athlete && !selectedAthlete}
+              base={base}
               report={report}
+              openWorkout={openWorkout}
             />
           ) : (
             <section>Cargando vista del deportista…</section>
           )
         )}
         {page === 'admin' && admin && (
-          <AdminPage
-            members={members}
-            createMember={createMember}
-            createGrant={createGrant}
-          />
+          <>
+            <AdminPage
+              base={base}
+              members={members}
+              createMember={createMember}
+              createGrant={createGrant}
+              changeRoles={(id, roles) => run(async () => {
+                await api(`${base}/members/${id}/roles`, { method: 'PATCH', body: JSON.stringify({ roles }) })
+                setMessage('Roles actualizados')
+              })}
+            />
+            <ClubManagement
+              base={base}
+              members={members}
+              ownMemberId={club.id}
+              refresh={() => refresh(me, '')}
+            />
+          </>
         )}
       </main>
     </div>

@@ -1,13 +1,23 @@
+import { AdaptationForm } from './AdaptationForm'
 import { useState } from 'react'
-import { dateTime, hour, place, trainingTypes } from '../format'
+import { dateTime, hour } from '../format'
 import type { Assignment, Dashboard } from '../types'
 import { Calendar } from './Calendar'
+import { PersonalExport } from './PersonalExport'
+import { CalendarExport } from './CalendarExport'
+import { GoogleCalendarSync } from './GoogleCalendarSync'
 import { FeedbackForm } from './FeedbackForm'
+import { RecoveryPage } from './RecoveryPage'
+import { FollowUp } from './FollowUp'
+import { TrainingLoad } from './TrainingLoad'
+import { WorkoutDetails, WorkoutRow } from './WorkoutCard'
 
 type Props = {
   dashboard: Dashboard
   editable: boolean
+  base: string
   report: (id: string, body: object) => Promise<void>
+  openWorkout: (id: string) => void
 }
 
 const fatigueNames: Record<string, string> = {
@@ -26,41 +36,13 @@ const fatiguePositions: Record<string, string> = {
   very_high: '88%',
 }
 
-const statusNames: Record<string, string> = {
-  completed: 'Completado',
-  partial: 'Parcial',
-  skipped: 'No realizado',
-}
-
-function WorkoutDetails({ item }: { item: Assignment }) {
-  return (
-    <>
-      <div className="badges">
-        <span className="badge">{place(item.venue)}</span>
-        <span className="badge pale">{trainingTypes[item.training_type]}</span>
-      </div>
-      <p>{item.prescription.instructions || 'Sin instrucciones adicionales.'}</p>
-      {!!item.prescription.steps?.length && (
-        <div className="steps">
-          <strong>Indicaciones paso a paso</strong>
-          <ol>
-            {item.prescription.steps.map((step, index) => (
-              <li key={index}>{step}</li>
-            ))}
-          </ol>
-        </div>
-      )}
-    </>
-  )
-}
-
 function Fatigue({ dashboard }: { dashboard: Dashboard }) {
   const { band, available } = dashboard.fatigue
   const label = fatigueNames[band]
 
   return (
-    <section>
-      <p className="eyebrow">Seguimiento</p>
+    <section className="fatigue-panel">
+      <p className="eyebrow">Estado actual</p>
       <h2>Fatiga actual</h2>
       {available ? (
         <>
@@ -83,43 +65,10 @@ function Fatigue({ dashboard }: { dashboard: Dashboard }) {
   )
 }
 
-function History({ items }: { items: Assignment[] }) {
-  return (
-    <section>
-      <p className="eyebrow">Registro</p>
-      <h2>Historial de entrenos</h2>
-      {items.length ? (
-        <div className="history">
-          {items.map(item => (
-            <article className="item" key={item.id}>
-              <div className="section-head">
-                <h3>{item.title}</h3>
-                <span className="badge pale">{statusNames[item.status]}</span>
-              </div>
-              <p className="muted">{dateTime(item.scheduled_start)}</p>
-              <WorkoutDetails item={item} />
-              {item.water_feedback?.sensations && (
-                <div className="record">
-                  <strong>Feedback de agua</strong>
-                  <p>Sensaciones: {item.water_feedback.sensations}</p>
-                  <p>Trabajo: {item.water_feedback.work_done}</p>
-                  <p>Lo mejor: {item.water_feedback.best}</p>
-                  <p>Lo peor: {item.water_feedback.worst}</p>
-                </div>
-              )}
-              {item.comment && <p>Comentario: {item.comment}</p>}
-            </article>
-          ))}
-        </div>
-      ) : (
-        <p className="muted">Todavía no hay entrenos registrados.</p>
-      )}
-    </section>
-  )
-}
-
-export function AthleteView({ dashboard, editable, report }: Props) {
+export function AthleteView({ dashboard, editable, base, report, openWorkout }: Props) {
   const [openFeedbackId, setOpenFeedbackId] = useState('')
+  const [showPending, setShowPending] = useState(false)
+  const [showComplete, setShowComplete] = useState(false)
   const assignments = [...dashboard.assignments].sort(
     (a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime(),
   )
@@ -127,19 +76,23 @@ export function AthleteView({ dashboard, editable, report }: Props) {
   const next = pending.find(
     item => new Date(item.scheduled_start).getTime() >= Date.now(),
   ) ?? pending[0]
-  const history = assignments.filter(item => item.status !== 'planned').reverse()
   const later = pending.filter(item => item.id !== next?.id)
+  const complete = [...assignments].reverse()
 
   function reportAction(item: Assignment) {
     if (!editable) {
-      return null
+      return item.status === 'planned' && !item.execution_state
+        ? <AdaptationForm base={base} item={item} /> : null
     }
 
     return (
       <>
-        <button onClick={() => setOpenFeedbackId(item.id)}>
-          {item.id === next?.id ? 'Marcar completado' : 'Registrar entreno'}
+        <div className="workout-actions">
+        {item.status === 'planned' && <button type="button" onClick={() => openWorkout(item.id)}>Realizar entreno</button>}
+        <button type="button" className="secondary" onClick={() => setOpenFeedbackId(item.id)}>
+          {item.execution_state === 'submitted' ? 'Corregir registro' : item.execution_state === 'draft' ? 'Continuar borrador' : 'Registrar entreno'}
         </button>
+        </div>
         {openFeedbackId === item.id && (
           <FeedbackForm
             item={item}
@@ -156,19 +109,28 @@ export function AthleteView({ dashboard, editable, report }: Props) {
 
   return (
     <>
-      <Calendar items={assignments} />
+      {editable && <PersonalExport base={base} />}
+      <Calendar
+        items={assignments}
+        footer={editable ? (
+          <>
+            <GoogleCalendarSync base={base} />
+            <CalendarExport base={base} />
+          </>
+        ) : undefined}
+      />
 
       <section className="next">
         <div className="section-head">
           <div>
-            <p className="eyebrow">Próximo</p>
-            <h2>Siguiente entreno</h2>
+            <p className="eyebrow">Tu próxima sesión</p>
+            <h2>Preparado para entrenar</h2>
           </div>
           {next && <span className="time-pill">{hour(next.scheduled_start)}</span>}
         </div>
         {next ? (
           <>
-            <p className="muted">{dateTime(next.scheduled_start)}</p>
+            <p className="next-date">{dateTime(next.scheduled_start)}</p>
             <h3>{next.title}</h3>
             <WorkoutDetails item={next} />
             {reportAction(next)}
@@ -178,24 +140,54 @@ export function AthleteView({ dashboard, editable, report }: Props) {
         )}
       </section>
 
-      <div className="columns">
+      <details
+        className="workout-disclosure"
+        onToggle={event => setShowPending(event.currentTarget.open)}
+      >
+        <summary>
+          <span>Entrenos programados</span>
+          <span className="badge pale">{later.length}</span>
+        </summary>
+        {showPending && (
+          <div className="workout-disclosure-content">
+            {later.length ? later.map(item => (
+              <WorkoutRow key={item.id} item={item} action={reportAction(item)} />
+            )) : <p className="muted">No hay más entrenos pendientes.</p>}
+          </div>
+        )}
+      </details>
+
+      <div className="athlete-follow-up-title">
+        <p className="eyebrow">Seguimiento personal</p>
+        <h2>Recuperación y evolución</h2>
+      </div>
+      <FollowUp base={base} athleteId={editable ? undefined : dashboard.athlete_id} />
+      <TrainingLoad assignments={assignments} />
+      <div className="athlete-follow-up">
         <Fatigue dashboard={dashboard} />
-        <History items={history} />
+        <RecoveryPage
+          embedded
+          base={base}
+          athleteId={editable ? undefined : dashboard.athlete_id}
+        />
       </div>
 
-      {later.length > 0 && (
-        <section>
-          <h2>Más entrenos pendientes</h2>
-          {later.map(item => (
-            <article className="item" key={item.id}>
-              <h3>{item.title}</h3>
-              <p className="muted">{dateTime(item.scheduled_start)}</p>
-              <WorkoutDetails item={item} />
-              {reportAction(item)}
-            </article>
-          ))}
-        </section>
-      )}
+      <details
+        className="workout-disclosure"
+        onToggle={event => setShowComplete(event.currentTarget.open)}
+      >
+        <summary>
+          <span>Todos los entrenamientos</span>
+          <span className="badge pale">{complete.length}</span>
+        </summary>
+        {showComplete && (
+          <div className="workout-disclosure-content">
+            {complete.length
+              ? complete.map(item => <WorkoutRow key={item.id} item={item} action={!['cancelled', 'replaced'].includes(item.status) ? reportAction(item) : undefined} />)
+              : <p className="muted">Todavía no hay entrenos asignados.</p>}
+          </div>
+        )}
+      </details>
     </>
   )
 }

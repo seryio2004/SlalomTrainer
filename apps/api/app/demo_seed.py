@@ -12,13 +12,14 @@ from .models import (
     Membership, TrainingGroup, TrainingGroupMembership, User, WorkoutSession,
 )
 from .security import hash_password, verify_password
+from .planning_demo import add_planning_demo
 
 ADMIN_EMAIL = "admin@example.org"
 GROUP_NAME = "Grupo Demo · Cadete K1"
 GROUP_DESCRIPTION = "Datos ficticios para probar la vista de entrenador."
-ATHLETE_PASSWORD = "demo-deportista-2026"
+ATHLETE_PASSWORD = "12345678"
 VIEW_ATHLETE_EMAIL = "demo.vista@example.org"
-VIEW_ATHLETE_PASSWORD = "DemoVista2026!"
+VIEW_ATHLETE_PASSWORD = "12345678"
 ATHLETES = [
     ("Alba Demo", "demo.alba@example.org"),
     ("Bruno Demo", "demo.bruno@example.org"),
@@ -88,7 +89,7 @@ def main() -> None:
                 TrainingGroupMembership.club_id == club.id,
                 TrainingGroupMembership.group_id == group.id,
                 TrainingGroupMembership.athlete_id == athlete.id,
-            ))
+            ).order_by(TrainingGroupMembership.joined_on.desc(), TrainingGroupMembership.left_on.asc().nulls_first()))
             if link is None:
                 db.add(TrainingGroupMembership(club_id=club.id, group_id=group.id, athlete_id=athlete.id, joined_on=today - timedelta(days=30)))
             elif link.left_on is not None:
@@ -166,6 +167,7 @@ def main() -> None:
                         best="La precisión en la primera mitad." if training_type == "water" and status != "skipped" else None,
                         worst="La salida de la última puerta." if training_type == "water" and status != "skipped" else None,
                     ))
+        add_planning_demo(db, club, coach, group, athlete_ids[-1])
         print(f"Grupo: {group.name} · {len(athlete_ids)} deportistas · {len(WORKOUTS)} sesiones de ejemplo")
         print(f"Entrenador: {ADMIN_EMAIL}")
         print(f"Deportista de prueba: {VIEW_ATHLETE_EMAIL} / {VIEW_ATHLETE_PASSWORD}")

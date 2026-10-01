@@ -1,16 +1,15 @@
 """Conservative display-only fatigue signal from recent training and feedback."""
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from statistics import mean
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import Assignment, Execution, Feedback, WorkoutSession
+from .models import Assignment, Club, Execution, Feedback, WorkoutSession
 
 
 def fatigue_indicator(db: Session, club_id: str, athlete_id: str) -> dict:
-    now = datetime.now(timezone.utc)
-    start = now - timedelta(days=7)
     rows = db.execute(
         select(Assignment, WorkoutSession, Execution, Feedback)
         .join(WorkoutSession, (WorkoutSession.club_id == Assignment.club_id) & (WorkoutSession.id == Assignment.session_id))
@@ -21,10 +20,12 @@ def fatigue_indicator(db: Session, club_id: str, athlete_id: str) -> dict:
     loads: list[int] = []
     efforts: list[int] = []
     feelings: list[int] = []
-    for _, session, execution, feedback in rows:
-        scheduled = session.scheduled_start
-        scheduled = scheduled if scheduled.tzinfo else scheduled.replace(tzinfo=timezone.utc)
-        if not start <= scheduled <= now or session.training_type == "rest":
+    club = db.get(Club, club_id)
+    today = datetime.now(ZoneInfo(club.timezone)).date()
+    for assignment, session, execution, feedback in rows:
+        if execution.state != "submitted" or assignment.prescription_snapshot.get("training_type", session.training_type) == "rest":
+            continue
+        if not execution.actual_date or not today - timedelta(days=6) <= execution.actual_date <= today:
             continue
         if execution.actual_minutes is not None and feedback.rpe is not None:
             loads.append(execution.actual_minutes * feedback.rpe)

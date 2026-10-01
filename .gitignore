@@ -8,3 +8,4 @@ dist/
 *.tsbuildinfo
 *.egg-info/
 *.db
+apps/api/private/

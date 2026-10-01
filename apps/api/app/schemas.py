@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import date, datetime, timezone
+from .prescription_schemas import StructuredPrescription
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
@@ -36,7 +37,7 @@ class GroupCoachIn(BaseModel):
     coach_membership_id: str
 
 
-class SessionIn(BaseModel):
+class SessionIn(StructuredPrescription):
     title: str = Field(min_length=1, max_length=160)
     training_type: str
     venue: Literal["club", "home"] = "club"
@@ -46,6 +47,8 @@ class SessionIn(BaseModel):
     steps: list[str] = Field(default_factory=list, max_length=20)
     athlete_ids: list[str] = Field(default_factory=list)
     group_id: str | None = None
+    plan_day_id: str | None = None
+    preview_athlete_ids: list[str] | None = None
 
     @model_validator(mode="after")
     def validate_home_details(self):
@@ -68,7 +71,31 @@ class SessionIn(BaseModel):
     def check_timezone(cls, value: datetime) -> datetime:
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("La fecha y hora necesitan zona horaria")
-        return value
+        return value.astimezone(timezone.utc)
+
+
+class SessionEditIn(StructuredPrescription):
+    model_config = ConfigDict(extra="forbid")
+    version: int = Field(ge=1)
+    title: str = Field(min_length=1, max_length=160)
+    training_type: str
+    venue: Literal["club", "home"]
+    scheduled_start: datetime
+    planned_minutes: int = Field(ge=0, le=1440)
+    instructions: str = Field(default="", max_length=4000)
+    steps: list[str] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_details(self):
+        validated = SessionIn.model_validate(self.model_dump(exclude={"version"}))
+        self.steps = validated.steps
+        self.scheduled_start = validated.scheduled_start
+        return self
+
+
+class SessionCancelIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: int = Field(ge=1)
 
 
 class ReportIn(BaseModel):
@@ -86,3 +113,47 @@ class ReportIn(BaseModel):
     worst: str | None = Field(default=None, max_length=1000)
 
 
+
+class SeriesResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    item_id: str | None = Field(default=None, max_length=64)
+    exercise_id: str | None = None
+    name: str = Field(min_length=1, max_length=160)
+    origin: Literal["prescribed", "added", "substituted"] = "prescribed"
+    set_number: int = Field(ge=1, le=100)
+    reps: int | None = Field(default=None, ge=0, le=10000)
+    kg: float | None = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
+    seconds: float | None = Field(default=None, ge=0, le=86400, allow_inf_nan=False)
+    meters: float | None = Field(default=None, ge=0, le=1000000, allow_inf_nan=False)
+    rir: int | None = Field(default=None, ge=0, le=10)
+    rpe: int | None = Field(default=None, ge=1, le=10)
+    side: Literal["bilateral", "left", "right", "alternating"] | None = None
+    load_convention: Literal["total", "per_side", "bodyweight"] | None = None
+    comment: str | None = Field(default=None, max_length=1000)
+
+
+class DisciplineResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    meters: float | None = Field(default=None, ge=0, le=1000000, allow_inf_nan=False)
+    seconds: float | None = Field(default=None, ge=0, le=86400, allow_inf_nan=False)
+    elevation_m: float | None = Field(default=None, ge=0, le=100000, allow_inf_nan=False)
+    model: str | None = Field(default=None, max_length=160)
+    resistance: str | None = Field(default=None, max_length=160)
+    watts: float | None = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
+    cadence: float | None = Field(default=None, ge=0, le=1000, allow_inf_nan=False)
+    protocol: str | None = Field(default=None, max_length=2000)
+    protocol_version: int | None = Field(default=None, ge=1)
+    measure_name: str | None = Field(default=None, max_length=160)
+    measure_value: float | None = Field(default=None, allow_inf_nan=False)
+    measure_unit: str | None = Field(default=None, max_length=32)
+
+
+class ExecutionReportIn(ReportIn):
+    version: int = Field(ge=1)
+    actual_date: date | None = None
+    results: list[SeriesResult] = Field(default_factory=list, max_length=1000)
+    discipline: DisciplineResult | None = None
+    technical_quality: int | None = Field(default=None, ge=1, le=5)
+    muscle_fatigue: int | None = Field(default=None, ge=1, le=5)
+    pain_intensity: int | None = Field(default=None, ge=0, le=10)
+    reason: str = Field(default="", max_length=500)

@@ -25,7 +25,9 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     const body = await response.json().catch(() => null)
     const detail = typeof body?.detail === 'string'
       ? body.detail
-      : 'No se pudo completar la operación'
+      : Array.isArray(body?.detail)
+        ? body.detail.map((issue: { msg: string }) => issue.msg.replace(/^Value error, /, '')).join('. ')
+        : 'No se pudo completar la operación'
     throw new Error(detail)
   }
 

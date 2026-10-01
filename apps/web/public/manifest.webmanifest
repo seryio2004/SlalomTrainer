@@ -3,7 +3,7 @@
   "short_name": "TeiTraining",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f4f7f5",
-  "theme_color": "#135c5e",
+  "background_color": "#f3f7fb",
+  "theme_color": "#12648b",
   "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
 }

@@ -82,7 +82,7 @@ def coach_can_see(db: Session, club_id: str, coach_member_id: str, athlete_id: s
         TrainingGroupMembership.athlete_id == athlete_id,
         TrainingGroup.active.is_(True),
         TrainingGroupMembership.joined_on <= today,
-        (TrainingGroupMembership.left_on.is_(None) | (TrainingGroupMembership.left_on >= today)),
+        (TrainingGroupMembership.left_on.is_(None) | (TrainingGroupMembership.left_on > today)),
         CoachGroupGrant.coach_membership_id == coach_member_id,
     ))
     return group is not None
@@ -98,14 +98,22 @@ def assignment_view(db: Session, assignment: Assignment) -> dict:
     execution = db.scalar(select(Execution).where(Execution.club_id == assignment.club_id, Execution.assignment_id == assignment.id))
     feedback = db.scalar(select(Feedback).where(Feedback.club_id == assignment.club_id, Feedback.assignment_id == assignment.id))
     load = None
-    if session.training_type != "rest" and execution and feedback and execution.actual_minutes is not None and feedback.rpe is not None:
+    if assignment.status in ("completed", "partial") and assignment.prescription_snapshot.get("training_type", session.training_type) != "rest" and execution and execution.state == "submitted" and feedback and execution.actual_minutes is not None and feedback.rpe is not None:
         load = execution.actual_minutes * feedback.rpe
     return {
         "id": assignment.id, "athlete_id": assignment.athlete_id,
         "session_id": assignment.session_id, "status": assignment.status,
-        "title": session.title, "training_type": session.training_type, "venue": session.venue,
-        "scheduled_start": utc_iso(session.scheduled_start), "planned_minutes": session.planned_minutes,
+        "plan_day_id": session.plan_day_id,
+        "title": assignment.prescription_snapshot.get("title", session.title), "training_type": assignment.prescription_snapshot.get("training_type", session.training_type), "venue": assignment.prescription_snapshot.get("venue", session.venue),
+        "scheduled_start": utc_iso(session.scheduled_start), "planned_minutes": assignment.prescription_snapshot.get("planned_minutes", session.planned_minutes),
         "prescription": assignment.prescription_snapshot,
+        "version": assignment.version,
+        "original_prescription": assignment.prescription_revisions[0]["prescription"] if assignment.prescription_revisions else assignment.prescription_snapshot,
+        "prescription_revisions": assignment.prescription_revisions,
+        "execution_state": execution.state if execution else None,
+        "actual_date": execution.actual_date.isoformat() if execution and execution.actual_date else None,
+        "execution_data": execution.data if execution else None,
+        "execution_revisions": execution.revisions if execution else [],
         "actual_minutes": execution.actual_minutes if execution else None,
         "rpe": feedback.rpe if feedback else None,
         "feeling": feedback.feeling if feedback else None,
